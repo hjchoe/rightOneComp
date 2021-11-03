@@ -128,47 +128,30 @@ class lift
 
   lift()
   {
-    calibrateliftMotor = task(liftCalibrate, vex::task::taskPriorityHigh);
-    calibrateliftMotor.suspend();
+    calibrateliftMotor = task(liftRunMotors, vex::task::taskPriorityHigh);
 
     Controller1.ButtonUp.pressed(liftUp);
+    Controller1.ButtonUp.released(liftStop);
     Controller1.ButtonDown.pressed(liftDown);
-    Controller1.ButtonRight.pressed(resetLiftMotorEncoder);
-    Controller1.ButtonLeft.pressed(recalibrateStart);
-    Controller1.ButtonLeft.released(recalibrateStop);
+    Controller1.ButtonUp.released(liftStop);
   }
 
   static void liftUp()
   {
-    recalibrateStop();
-    liftMotor.spinTo(liftAngle, rotationUnits::deg, liftSpeed, velocityUnits::pct, true);
+    liftMotor.setVelocity(liftSpeed, velocityUnits::pct);
   }
 
   static void liftDown()
   {
-    recalibrateStop();
-    liftMotor.spinTo(0, rotationUnits::deg, liftSpeed, velocityUnits::pct, true);
+    liftMotor.setVelocity(-liftSpeed, velocityUnits::pct);
   }
 
-  static void resetLiftMotorEncoder()
-  {
-    recalibrateStop();
-    liftMotor.resetRotation();
-  }
-
-  static void recalibrateStart()
-  {
-    liftMotor.setVelocity(-10, velocityUnits::pct);
-    calibrateliftMotor.resume();
-  }
-
-  static void recalibrateStop()
+  static void liftStop()
   {
     liftMotor.setVelocity(0, velocityUnits::pct);
-    calibrateliftMotor.suspend();
   }
 
-  static int liftCalibrate()
+  static int liftRunMotors()
   {
     while (true)
     {
@@ -184,6 +167,9 @@ class arm
 {
   public:
 
+  static bool suckState;
+  static bool spitState;
+
   arm()
   {
     runArmMotors = task(runArm, vex::task::taskPriorityHigh);
@@ -191,6 +177,8 @@ class arm
     lowArmStop();
     highArmStop();
     donutStop();
+    suckState = false;
+    spitState = false;
 
     donutArmMotor.setVelocity(0, velocityUnits::pct);
 
@@ -206,7 +194,6 @@ class arm
 
     Controller1.ButtonX.pressed(donutSuck);
     Controller1.ButtonA.pressed(donutSpit);
-    Controller1.ButtonB.pressed(donutStop);
 
     Controller1.Axis2.changed(setDonutArmVelocity);
   }
@@ -250,12 +237,34 @@ class arm
 
   static void donutSuck()
   {
-    donutPickerMotor.setVelocity(donutSpeed, velocityUnits::pct);
+    if (suckState)
+    {
+      donutPickerMotor.setVelocity(0, velocityUnits::pct);
+      suckState = false;
+      spitState = false;
+    }
+    else if (!suckState)
+    {
+      donutPickerMotor.setVelocity(donutSpeed, velocityUnits::pct);
+      suckState = true;
+      spitState = false;
+    }    
   }
 
   static void donutSpit()
   {
-    donutPickerMotor.setVelocity(-donutSpeed, velocityUnits::pct);
+    if (spitState)
+    {
+      donutPickerMotor.setVelocity(0, velocityUnits::pct);
+      spitState = false;
+      suckState = false;
+    }
+    else if (!spitState)
+    {
+      donutPickerMotor.setVelocity(-donutSpeed, velocityUnits::pct);
+      spitState = true;
+      suckState = false;
+    }
   }
 
   static void donutStop()
@@ -277,6 +286,8 @@ class arm
     return 0;
   }
 };
+bool arm::suckState = false;
+bool arm::spitState = false;
 
 class centerAssistTool
 {
@@ -435,7 +446,7 @@ int drivetrainMotorsCallback()
     leftMotor.spin(forward);
     rightMotor.spin(forward);
 
-    printf("\nleft motor: %f | right motor: %f\n", leftMotor.velocity(velocityUnits::pct), rightMotor.velocity(velocityUnits::pct));
+    //printf("\nleft motor: %f | right motor: %f\n", leftMotor.velocity(velocityUnits::pct), rightMotor.velocity(velocityUnits::pct));
 
     wait(25, msec);
   }
@@ -455,6 +466,8 @@ int drivetrainMotorsCallback()
 
 void pre_auton(void)
 {
+  rightMotor.setBrake(brakeType::brake);
+  leftMotor.setBrake(brakeType::brake);
   vexcodeInit();
 }
 
@@ -475,52 +488,42 @@ void autonomous(void)
   int autoSpeed = 100;
 
   // setup arm
-  double stepOne = 1.4;
-  lowArmMotor.spinFor(stepOne, rotationUnits::rev, autoSpeed, velocityUnits::pct, true);
-  double stepTwo = -2;
-  highArmMotor.spinFor(stepTwo, rotationUnits::rev, autoSpeed, velocityUnits::pct, false);
-  double stepThree = 1.2;
-  donutArmMotor.spinFor(stepThree, rotationUnits::rev, autoSpeed, velocityUnits::pct, true);
+  lowArmMotor.spinFor(1.4, rotationUnits::rev, autoSpeed, velocityUnits::pct, true);
+  highArmMotor.spinFor(-2, rotationUnits::rev, autoSpeed, velocityUnits::pct, false);
+  donutArmMotor.spinFor(1.2, rotationUnits::rev, autoSpeed, velocityUnits::pct, true);
 
   wait(1000, msec);
 
   // drop two and keep one ring
-  double stepFour = 3;
-  donutPickerMotor.spinFor(stepFour, rotationUnits::rev, autoSpeed, velocityUnits::pct, true);
+  donutPickerMotor.spinFor(3, rotationUnits::rev, autoSpeed, velocityUnits::pct, true);
 
   // bring up arm to drive
-  double stepFive = 2;
-  highArmMotor.spinFor(stepFive, rotationUnits::rev, autoSpeed, velocityUnits::pct, false);
-  double stepSix = -1.25;
-  donutArmMotor.spinFor(stepSix, rotationUnits::rev, autoSpeed, velocityUnits::pct, false);
+  highArmMotor.spinFor(2, rotationUnits::rev, autoSpeed, velocityUnits::pct, false);
+  donutArmMotor.spinFor(-1.25, rotationUnits::rev, autoSpeed, velocityUnits::pct, false);
 
   // drive forward to goal
-  double stepSeven = 1;
-  leftMotor.spinFor(stepSeven, rotationUnits::rev, 50, velocityUnits::pct, false);
-  rightMotor.spinFor(stepSeven, rotationUnits::rev, 50, velocityUnits::pct, true);
+  leftMotor.spinFor(1, rotationUnits::rev, 50, velocityUnits::pct, false);
+  rightMotor.spinFor(1, rotationUnits::rev, 50, velocityUnits::pct, true);
 
   // focus to goal
   cat.focus();
 
   // drive forward to goal
-  double stepEight = 1.5;
-  leftMotor.spinFor(stepEight, rotationUnits::rev, 100, velocityUnits::pct, false);
-  rightMotor.spinFor(stepEight, rotationUnits::rev, 100, velocityUnits::pct, true);
+  leftMotor.spinFor(1.5, rotationUnits::rev, 100, velocityUnits::pct, false);
+  rightMotor.spinFor(1.5, rotationUnits::rev, 100, velocityUnits::pct, true);
 
   // pickup goal 1
   l.liftUp();
 
   // drive right into zone
-  double stepNine = 5;
-  rightMotor.spinFor(stepNine, rotationUnits::rev, 100, velocityUnits::pct, true);
+  rightMotor.spinFor(5, rotationUnits::rev, 100, velocityUnits::pct, true);
 
   // drop goal 1
   l.liftDown();
 
   // backup away
-  double stepTen = -2;
-  leftMotor.spinFor(stepTen, rotationUnits::rev, 100, velocityUnits::pct, false);
-  rightMotor.spinFor(stepTen, rotationUnits::rev, 100, velocityUnits::pct, true);
+  leftMotor.spinFor(-2, rotationUnits::rev, 100, velocityUnits::pct, false);
+  rightMotor.spinFor(-2, rotationUnits::rev, 100, velocityUnits::pct, true);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -533,8 +536,15 @@ void autonomous(void)
 /*  You must modify the code to add your own robot specific commands here.   */
 /*---------------------------------------------------------------------------*/
 
+void pre_user(void)
+{
+  rightMotor.setBrake(brakeType::coast);
+  leftMotor.setBrake(brakeType::coast);
+}
+
 void usercontrol(void)
 {
+  pre_user();
   driveTrain dt;
   lift l;
   arm a;

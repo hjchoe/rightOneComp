@@ -41,8 +41,6 @@ bool RemoteControlCodeEnabled = true;
  */
 void vexcodeInit( void )
 {
-  rightMotor.setBrake(brakeType::brake);
-  leftMotor.setBrake(brakeType::brake);
   liftMotor.setBrake(brakeType::hold);
   lowArmMotor.setBrake(brakeType::hold);
   highArmMotor.setBrake(brakeType::hold);
